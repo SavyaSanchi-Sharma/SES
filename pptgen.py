@@ -38,7 +38,11 @@ def getphoto(SlideData):
             print(f"Error getting image for suggestion '{suggestion}': {e}")
     return image_paths
 
-def create_presentation(slide_data, image_paths=None, output_filename="presentation.pptx", template_path=None):
+def create_presentation(topic_list, include_code=True, output_filename="presentation.pptx", template_path=None):
+    # Get slide data and image paths
+    slide_data = gettext(topic_list, include_code)
+    image_paths = getphoto(slide_data)
+
     if image_paths is None:
         image_paths = []
 
@@ -69,7 +73,7 @@ def create_presentation(slide_data, image_paths=None, output_filename="presentat
             title.text = overall_title
         else:
             # Add a new text box for the title if the placeholder doesn't exist
-            title_box = slide.shapes.add_textbox(Inches(1), Inches(0.5), Inches(5), Inches(1))
+            title_box = slide.shapes.add_textbox(Inches(0.25), Inches(0.5), Inches(9), Inches(1.5))
             title_frame = title_box.text_frame
             title_frame.text = overall_title
             title_p = title_frame.paragraphs[0]
@@ -164,7 +168,7 @@ def create_presentation(slide_data, image_paths=None, output_filename="presentat
                 left = Inches(6.5)  # Place the image on the right side
                 top = Inches(1)  # Align the image with the top of the content
                 width = Inches(3)  # Elongated width
-                height = Inches(5)  # Elongated height
+                height = Inches(4)  # Elongated height
 
                 # Add the image to the slide
                 slide.shapes.add_picture(img_path, left, top, width, height)
@@ -195,5 +199,5 @@ template_choice = int(input("Enter the number of the template you want to use: "
 template_path = TEMPLATES.get(template_choice, None)
 
 # Example usage
-topic = ['python']
-create_presentation(gettext(topic, True), getphoto(gettext(topic, True)), template_path=template_path)
+topic = ['sunshine','sydney sweeney']
+create_presentation(topic, include_code=False, template_path=template_path)

@@ -130,7 +130,7 @@ def structured(topic_list, include_code=True):
 
         **Requirements:**
 
-        *   **Number of Slides:** Generate approximately 5-7 slides.
+        *   **Number of Slides:** Generate as many slides as necessary to comprehensively cover the topic. There is no limit to the number of slides.
         *   **Slide Titles:** Keep slide titles very short and to the point.
         *   **Bullet Points:** Bullet points should be concise summaries, *not* full sentences. Use keywords and phrases. Aim for 10-20 words per bullet point.
         *   **Code Integration:** If a code snippet is provided, place it in a separate slide immediately after the relevant content slide.
