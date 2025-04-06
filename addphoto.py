@@ -10,7 +10,7 @@ IMAGE_DIR = "./images/"
 os.makedirs(IMAGE_DIR, exist_ok=True)
 
 def get_images(query, n):
-    client = API(os.getenv('PEXEL_API'))  # Initialize API with key
+    client = API('5JV9cVZRTr6VUv9pqbYDWvxlluf7DvAtm1B8xL7VJvVia9ULckKbnYfc')  # Initialize API with key
     try:
         client.search(query, results_per_page=n, page=1)  # Perform search
         response_data = client.json  # Get API response

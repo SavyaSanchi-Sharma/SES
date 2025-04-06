@@ -1,6 +1,8 @@
 import re
 import os
 import random
+from flask import Flask, request, jsonify, send_file, render_template
+from flask_cors import CORS  # Import for handling CORS
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
@@ -8,24 +10,37 @@ from pptx.dml.color import RGBColor
 import gptText
 import addphoto
 
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+
+# Define upload and output directories
+UPLOAD_FOLDER = 'uploads'
+OUTPUT_FOLDER = 'static/presentations'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
 # Define template paths
 TEMPLATES = {
-    1: "template/minimalistic.pptx",  # Replace with the actual path to your first template
-    2: "template/colourful.pptx",  # Replace with the actual path to your second template
-    3: "template/professional.pptx",  # Replace with the actual path to your third template
-    4: "template/dark.pptx",  # Replace with the actual path to your fourth template
+    1: "template/minimalistic.pptx",
+    2: "template/colourful.pptx",
+    3: "template/professional.pptx",
+    4: "template/dark.pptx",
 }
 
-def gettext(topicList, code: bool):
-    slides_data = gptText.structured(topic_list=topicList, include_code=code)
+# Store the latest generated presentation for the /result endpoint
+current_presentation = None
+
+def gettext(topic_list, code: bool):
+    slides_data = gptText.structured(topic_list=topic_list, include_code=code)
     if slides_data and isinstance(slides_data, list) and len(slides_data) > 0 and 'Slides' in slides_data[0]:
         return slides_data[0]['Slides']
     else:
         return ""
 
-def getphoto(SlideData):
+def getphoto(slide_data):
+    os.makedirs('images', exist_ok=True)
     pattern = r"Image Suggestion:\s*(.+)"
-    image_suggestions = re.findall(pattern, SlideData)
+    image_suggestions = re.findall(pattern, slide_data)
     image_paths = []
     for suggestion in image_suggestions:
         try:
@@ -38,7 +53,15 @@ def getphoto(SlideData):
             print(f"Error getting image for suggestion '{suggestion}': {e}")
     return image_paths
 
-def create_presentation(topic_list, include_code=True, output_filename="presentation.pptx", template_path=None):
+def create_presentation(topic, template_choice=1, include_code=True):
+    """Create a presentation based on topic and template choice"""
+    # Convert topic to list if it's a string
+    topic_list = [topic] if isinstance(topic, str) else topic
+    
+    # Generate a unique filename for the presentation
+    presentation_id = f"presentation_{random.randint(1000, 9999)}"
+    output_filename = f"{OUTPUT_FOLDER}/{presentation_id}.pptx"
+    
     # Get slide data and image paths
     slide_data = gettext(topic_list, include_code)
     image_paths = getphoto(slide_data)
@@ -46,6 +69,9 @@ def create_presentation(topic_list, include_code=True, output_filename="presenta
     if image_paths is None:
         image_paths = []
 
+    # Get template path
+    template_path = TEMPLATES.get(template_choice, None)
+    
     # Load the selected template or create a blank presentation
     if template_path and os.path.exists(template_path):
         prs = Presentation(template_path)
@@ -181,6 +207,8 @@ def create_presentation(topic_list, include_code=True, output_filename="presenta
     # Save the presentation
     prs.save(output_filename)
     print(f"Presentation saved to {output_filename}")
+    
+    # Clean up the images directory
     if os.path.exists('images'):
         try:
             for filename in os.listdir('images'):
@@ -189,15 +217,76 @@ def create_presentation(topic_list, include_code=True, output_filename="presenta
             os.rmdir('images')
         except OSError as e:
             print(f"Failed to cleanup 'images' directory: {e}")
+    
+    return {
+        "id": presentation_id,
+        "filename": f"{presentation_id}.pptx",
+        "path": output_filename
+    }
 
-# Prompt user to select a template
-print("Select a template:")
-for key, path in TEMPLATES.items():
-    print(f"{key}: {path}")
+# API Routes for React Frontend
 
-template_choice = int(input("Enter the number of the template you want to use: "))
-template_path = TEMPLATES.get(template_choice, None)
+@app.route('/api/generate', methods=['POST'])
+def api_generate():
+    """API endpoint for generating presentations"""
+    global current_presentation
+    
+    try:
+        data = request.get_json()
+        
+        if not data or 'topic' not in data:
+            return jsonify({"error": "Topic is required"}), 400
+        
+        topic = data.get('topic')
+        template = int(data.get('template', 1))
+        
+        # Change to match frontend parameter name
+        include_code = data.get('includeCode', True)
+        
+        # Generate presentation
+        presentation_info = create_presentation(topic, template, include_code)
+        current_presentation = presentation_info
+        
+        return jsonify({
+            "message": "Presentation created successfully!",
+            "presentation_id": presentation_info["id"],
+            "filename": presentation_info["filename"]
+        }), 200
+    
+    except Exception as e:
+        print(f"Error generating presentation: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-# Example usage
-topic = ['sunshine','sydney sweeney']
-create_presentation(topic, include_code=False, template_path=template_path)
+@app.route('/api/result', methods=['GET'])
+def api_result():
+    """API endpoint to get information about the current presentation"""
+    global current_presentation
+    
+    if current_presentation:
+        return jsonify({
+            "presentation_id": current_presentation["id"],
+            "filename": current_presentation["filename"]
+        }), 200
+    else:
+        return jsonify({"error": "No presentation has been generated yet"}), 404
+
+@app.route('/api/download/<presentation_id>', methods=['GET'])
+def api_download(presentation_id):
+    """API endpoint to download a generated presentation"""
+    filename = f"{presentation_id}.pptx"
+    file_path = os.path.join(OUTPUT_FOLDER, filename)
+    
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True, download_name=filename)
+    else:
+        return jsonify({"error": "Presentation not found"}), 404
+
+@app.route('/')
+def index():
+    """Render the main page - for direct browser access"""
+    templates = [{"id": key, "name": os.path.basename(path).replace(".pptx", "").title()} 
+                for key, path in TEMPLATES.items()]
+    return render_template('index.html', templates=templates)
+
+if __name__ == '__main__':
+    app.run(debug=True)
